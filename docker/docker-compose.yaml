@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  streamlit-app:
+    build:
+      context: ..
+      dockerfile: app/Dockerfile
+    ports:
+      - "8501:8501"
+    depends_on:
+      - ollama
+    volumes:
+      - ..:/app
+    environment:
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+    networks:
+      - app-network
+
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    volumes:
+      - ./ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_KEEP_ALIVE=5m
+      - OLLAMA_FLASH_ATTENTION=0
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

@@ -1,0 +1,5 @@
+streamlit
+langchain-ollama
+streamlit-pdf-viewer
+pdf2image
+pytesseract

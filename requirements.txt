@@ -1,5 +1,7 @@
-streamlit
-langchain-ollama
-streamlit-pdf-viewer
-pdf2image
-pytesseract
+# Direct runtime dependencies. requirements.lock pins the full resolved set.
+streamlit==1.65.0
+streamlit-pdf-viewer==0.0.30
+langchain-core==1.6.6
+langchain-ollama==1.1.0
+pdf2image==1.17.0
+pytesseract==0.3.13

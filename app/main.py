@@ -1,114 +1,86 @@
-import streamlit as st
-from langchain_ollama import ChatOllama
-from streamlit_pdf_viewer import pdf_viewer
-from langchain_core.prompts import ChatPromptTemplate
-from pdf2image import convert_from_path
-from pytesseract import image_to_string
-import tempfile
+"""Streamlit UI: upload a scanned PDF, preview it, and download the generated Markdown."""
+
+from __future__ import annotations
+
+import hashlib
 import os
+import tempfile
 
-# Configuração do modelo
-chat = ChatOllama(model="llama3", base_url="http://ollama:11434")
+import streamlit as st
+from pipeline import (
+    MarkdownWriter,
+    Settings,
+    document_to_markdown,
+    ollama_markdown_writer,
+    render_pdf_pages,
+    tesseract_extractor,
+)
+from streamlit_pdf_viewer import pdf_viewer
 
-# Prompt de conversão em Markdown
-markdown_prompt = ChatPromptTemplate.from_messages([
-    # Context
-    ("system", "Você é um assistente especializado em transformar documentos escaneados ou digitalizados em Markdown estruturado e organizado. Você deve criar um documento Markdown que seja fiel ao original, seguindo as boas práticas de Markdown e garantindo que tabelas, listas e quaisquer outros elementos estruturais estejam bem representados."),
-    
-    # Process (com few-shot)
-    ("system", """Aqui está um exemplo de como você deve estruturar o Markdown a partir do texto fornecido:
+settings = Settings.from_env()
 
-Texto:
-Título: Relatório de Vendas 2024
-1. **Introdução**
-O relatório analisa os dados de vendas de 2024.
 
-2. **Tabelas**
-| Mês     | Vendas (R$) | Crescimento (%) |
-|---------|-------------|-----------------|
-| Janeiro | 50.000      | 10%            |
-| Fevereiro | 55.000    | 8%             |
+@st.cache_resource
+def markdown_writer(model: str, base_url: str) -> MarkdownWriter:
+    return ollama_markdown_writer(model, base_url)
 
-3. **Conclusão**
-Os dados indicam crescimento contínuo.
 
-Markdown:
-# Relatório de Vendas 2024
-
-## Introdução
-O relatório analisa os dados de vendas de 2024.
-
-## Tabelas
-| Mês        | Vendas (R$) | Crescimento (%) |
-|------------|-------------|-----------------|
-| Janeiro    | 50.000      | 10%            |
-| Fevereiro  | 55.000      | 8%             |
-
-## Conclusão
-Os dados indicam crescimento contínuo.
-"""),
-
-    # Task
-    ("human", "Converta o texto abaixo em Markdown estruturado, preservando o layout, tabelas e gráficos:\nTexto: {text}\nMarkdown:")
-])
-
-# Função para converter documento em imagens
-def convert_to_images(file_path):
-    return convert_from_path(file_path)
-
-# Função para aplicar OCR em uma imagem
-def extract_text_from_image(image):
-    return image_to_string(image)
-
-# Função para converter texto em Markdown
-def convert_to_markdown(text):
-    response = markdown_prompt | chat
-    output = response.invoke({"text": text})
-    return output.content
-
-# Pipeline principal
-def document_to_markdown(file_path):
-    images = convert_to_images(file_path)
-    markdowns = []
-    for idx, image in enumerate(images):
-        st.info(f"Processando página {idx + 1} de {len(images)}...")
-        text = extract_text_from_image(image)
-        markdown = convert_to_markdown(text)
-        markdowns.append(markdown)
-    return "\n\n".join(markdowns)
-
-# Interface do Streamlit
-st.set_page_config(page_title="Conversor de PDF para Markdown", layout="wide")
-st.title("📝 Conversor de PDF para Markdown")
-st.markdown("Transforme documentos PDF escaneados em Markdown bem estruturado, preservando tabelas, gráficos e layouts!")
+st.set_page_config(page_title="PDF para Markdown", layout="wide")
+st.title("📝 Conversor de PDF escaneado para Markdown")
+st.caption(
+    f"OCR: Tesseract ({settings.ocr_language}) · Modelo local: {settings.ollama_model} via Ollama"
+)
 
 uploaded_file = st.file_uploader("📂 Envie um arquivo PDF", type=["pdf"])
 
 if uploaded_file is not None:
+    content = uploaded_file.getvalue()
+    digest = hashlib.sha256(content).hexdigest()
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
-        temp_pdf.write(uploaded_file.read())
+        temp_pdf.write(content)
         temp_pdf_path = temp_pdf.name
 
-    # Dividindo a tela em duas colunas para renderizar lado a lado
-    col1, col2 = st.columns(2)
+    try:
+        original, generated = st.columns(2)
+        with original:
+            st.subheader("📄 PDF original")
+            pdf_viewer(temp_pdf_path)
 
-    # Coluna 1: Visualização do PDF Original
-    with col1:
-        st.subheader("📄 Visualização do PDF Original")
-        pdf_viewer(temp_pdf_path)
+        with generated:
+            st.subheader("📜 Markdown gerado")
+            # Streamlit reruns the script on every interaction; keep the result per file so that
+            # clicking "download" does not convert the document again.
+            if st.session_state.get("digest") != digest:
+                st.session_state.pop("markdown", None)
 
-    # Coluna 2: Markdown gerado
-    with col2:
-        st.subheader("📜 Markdown Gerado")
-        st.info("⏳ Processando...")
+            if st.button("Converter", type="primary"):
+                progress = st.progress(0.0, text="Processando...")
 
-        # Processar o PDF
-        markdown_output = document_to_markdown(temp_pdf_path)
-        st.success("🎉 Conversão concluída!")
-        st.markdown(markdown_output, unsafe_allow_html=True)
+                def on_page(index: int, total: int) -> None:
+                    progress.progress(index / total, text=f"Página {index} de {total}")
 
-        # Botão para baixar o Markdown
-        st.download_button("⬇️ Baixar Markdown", markdown_output, file_name="documento.md", mime="text/markdown")
+                st.session_state["markdown"] = document_to_markdown(
+                    temp_pdf_path,
+                    render_pages=render_pdf_pages,
+                    extract_text=tesseract_extractor(settings.ocr_language),
+                    write_markdown=markdown_writer(settings.ollama_model, settings.ollama_base_url),
+                    on_page=on_page,
+                )
+                st.session_state["digest"] = digest
+                progress.empty()
 
-    # Limpar o arquivo temporário
-    os.unlink(temp_pdf_path)
+            markdown_output = st.session_state.get("markdown")
+            if markdown_output is not None:
+                st.success("🎉 Conversão concluída!")
+                # Model output derived from an untrusted document is rendered as Markdown only,
+                # never as raw HTML.
+                st.markdown(markdown_output)
+                st.download_button(
+                    "⬇️ Baixar Markdown",
+                    markdown_output,
+                    file_name="documento.md",
+                    mime="text/markdown",
+                )
+    finally:
+        os.unlink(temp_pdf_path)

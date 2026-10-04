@@ -1,30 +1,22 @@
-# Base image com Python
-FROM python:3.9-slim
+# Streamlit app: Poppler rasterizes PDF pages, Tesseract performs OCR (Portuguese + English).
+FROM python:3.12-slim@sha256:dddfd7e07f9d15aeeca61529320492139d21cac7f0070c00609243e51e4e0016
 
-# Diretório de trabalho no container
-WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Atualiza pacotes do sistema e instala dependências
-RUN apt-get update && apt-get install -y \
-    tesseract-ocr \
-    poppler-utils \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        tesseract-ocr tesseract-ocr-por tesseract-ocr-eng poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Copia o arquivo requirements.txt dentro da pasta docker
-COPY requirements.txt .
+WORKDIR /app
+COPY requirements.lock ./
+RUN pip install --no-cache-dir -r requirements.lock
 
-# Instala as dependências do Python
-RUN pip install --no-cache-dir -r requirements.txt
+COPY app/ ./app/
+RUN useradd --create-home --uid 10001 appuser
+USER appuser
 
-# Copia o restante do código para o diretório de trabalho
-COPY . .
-
-# Expõe a porta utilizada pelo Streamlit
 EXPOSE 8501
-
-# Comando para rodar a aplicação Streamlit
 CMD ["streamlit", "run", "app/main.py", "--server.port=8501", "--server.address=0.0.0.0"]

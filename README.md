@@ -95,10 +95,16 @@ pdfs/                synthetic sample document
 requirements.txt     direct dependencies; requirements.lock pins the full set
 ```
 
+## Related work
+
+- [rag-knowledge-base](https://github.com/Brilhante29/rag-knowledge-base): retrieval over documents with reproducible evaluation.
+- [llm-eval-harness](https://github.com/Brilhante29/llm-eval-harness): contract-first scoring of LLM outputs against references.
+- [cost-aware-inference](https://github.com/Brilhante29/cost-aware-inference): latency, tokens, and price of local versus hosted models.
+
 ## Author
 
 **Guilherme Brilhante**, software engineer working on scalable backends and production AI.
-[LinkedIn](https://www.linkedin.com/in/guilhermefreirebrilhanteseveriano/) · [GitHub](https://github.com/Brilhante29)
+[LinkedIn](https://www.linkedin.com/in/guilhermefreirebrilhanteseveriano/) · [GitHub](https://github.com/Brilhante29) · [Publications](https://dblp.org/pid/353/6812.html)
 
 ## License
 
